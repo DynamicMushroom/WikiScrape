@@ -1,8 +1,14 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 import mysql.connector
 from dotenv import load_dotenv
 import os
+
+#initialize Flask app
+app = Flask(__name__)
+CORS(app)
 
 #Load .env file
 load_dotenv()
@@ -16,16 +22,16 @@ db_config = {
   }
 
 
-def create_database(cursor, db_name):
+def create_database(cursor, DB_NAME):
     try:
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
     except mysql.connector.Error as err:
         print(f"Error: {err}")
         
 
-def create_table(cursor, db_name):
+def create_table(cursor, DB_NAME):
     try:
-        cursor.execute(f"USE {db_name}")
+        cursor.execute(f"USE {DB_NAME}")
         cursor.execute("""
              CREATE TABLE IF NOT EXISTS wikipedia_articles (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -37,6 +43,7 @@ def create_table(cursor, db_name):
         """)
     except mysql.connector.Error as err:
         print(f"Error: {err}")
+       
         
 
 def save_scraped_data(conn, title, url, content):
@@ -63,32 +70,80 @@ def extract_entire_page(soup):
         content += paragraph.get_text() + '\n'
     return content
 
-def main():
+
+def search_articles(conn, search_query):
     try:
-        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        # Create database and tables
-        create_database(cursor, "wikiscrape")
-        create_table(cursor, "wikiscrape")
-        page_title = input("Enter the Wikipedia page title to scrape: ")
-        url = f"https://en.wikipedia.org/wiki/{page_title.replace(' ', '_')}"
-        soup = get_wikipedia_page(url)
-        content = extract_entire_page(soup)
-        print("Extracted Information: ")
-        print(content)
-
-        # Save the scraped data to the database
-        save_scraped_data(conn, page_title, url, content)
-
-        # Saving the information to a file
-        with open('extracted_info.txt', 'w', encoding='utf-8') as file:
-            file.write(content)
-
+        query =  "SELECT * FROM wikipedia_articles WHERE title LIKE %s OR content LIKE %s"
+        cursor.execute(query, ('%' + search_query + '%', '%' + search_query + '%'))
+        results = cursor.fetchall()
+        for row in results:
+            print(row)
     except mysql.connector.Error as err:
         print(f"Error: {err}")
     finally:
         cursor.close()
+        
+
+def update_article(conn, article_id, new_title, new_content):
+    try:
+        cursor = conn.cursor()
+        query = "UPDATE wikipedia_articles SET title = %s, content = %s WHERE id = %s"
+        cursor.execute(query, (new_title, new_content, article_id))
+        conn.commit()
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+    finally:
+        cursor.close()
+        
+
+def delete_article(conn, article_id):
+    try:
+        cursor = conn.cursor()
+        query = "DELETE FROM wikipedia_articles WHERE id = %s"
+        cursor.execute(query, (article_id,))
+        conn.commit()
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+    finally:
+        cursor.close()
+        
+@app.route('/scrape', methods=['POST'])
+def scrape_wikipedia():
+    page_title = request.json['title']
+    url = f"https://en.wikipedia.org/wiki/{page_title.replace(' ', '_')}"
+    soup = get_wikipedia_page(url)
+    content = extract_entire_page(soup)
+    save_scraped_data(mysql.connector.connect(**db_config), page_title, url, content)
+    return jsonify({"message": "Scraped and saved successfully", "title": page_title, "url": url})
+
+
+app.route('/search', methods=['GET'])
+def search():
+        search_query = request.args.get('query')
+        conn = mysql.connector.connect(**db_config)
+        results = search_articles(conn, search_query)
         conn.close()
+        return jsonify(results)
+    
+
+app.route('/update', metods=['PUT'])
+def update():
+    article_id = request.json['id']
+    new_title = request.json['title']
+    new_content = request.json['content']
+    conn = mysql.connector.connect(**db_config)
+    update_article(conn, article_id, new_title, new_content)
+    conn.close()
+    return jsonify({"message": "Article updated", "id": article_id})
+
+@app.route('/delete', methods=['DELETE'])
+def delete():
+    article_id = request.json['id']
+    conn = mysql.connector.connect(**db_config)
+    delete_article(conn, article_id)
+    conn.close()
+    return jsonify({"message": "Article deleted", "id": article_id})
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
