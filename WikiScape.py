@@ -21,14 +21,14 @@ db_config = {
    'database': os.getenv('DB_NAME')
   }
 
-
+#Create database if it does not exist
 def create_database(cursor, DB_NAME):
     try:
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
     except mysql.connector.Error as err:
         print(f"Error: {err}")
         
-
+#Create table if not exists
 def create_table(cursor, DB_NAME):
     try:
         cursor.execute(f"USE {DB_NAME}")
@@ -45,7 +45,7 @@ def create_table(cursor, DB_NAME):
         print(f"Error: {err}")
        
         
-
+   #Save scraped data to db
 def save_scraped_data(conn, title, url, content):
     try:
         cursor = conn.cursor()
@@ -57,20 +57,20 @@ def save_scraped_data(conn, title, url, content):
     finally:
         cursor.close()
         
-
+ #Scrape page
 def get_wikipedia_page(page_url):
     response = requests.get(page_url)
     soup = BeautifulSoup(response.text, 'html.parser')
     return soup
 
-
+#Entire page
 def extract_entire_page(soup):
     content = ''
     for paragraph in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']):
         content += paragraph.get_text() + '\n'
     return content
 
-
+#Search articles
 def search_articles(conn, search_query):
     try:
         cursor = conn.cursor()
@@ -125,12 +125,12 @@ def search():
     results = search_articles(conn, search_query)
     conn.close()
     # Format the results as a list of dictionaries
-    articles = [{'title': row[1], 'content': row[3]} for row in results]  # Adjust indexes as necessary
+    articles = [{'title': row[1], 'content': row[3]} for row in results] 
     return jsonify(articles)
 
     
 
-app.route('/update', metods=['PUT'])
+@app.route('/update', metods=['PUT'])
 def update():
     article_id = request.json['id']
     new_title = request.json['title']
