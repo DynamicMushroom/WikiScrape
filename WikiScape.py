@@ -130,7 +130,7 @@ def search():
 
     
 
-@app.route('/update', metods=['PUT'])
+@app.route('/update', methods=['PUT'])
 def update():
     article_id = request.json['id']
     new_title = request.json['title']
