@@ -74,15 +74,15 @@ def extract_entire_page(soup):
 def search_articles(conn, search_query):
     try:
         cursor = conn.cursor()
-        query =  "SELECT * FROM wikipedia_articles WHERE title LIKE %s OR content LIKE %s"
+        query = "SELECT * FROM wikipedia_articles WHERE title LIKE %s OR content LIKE %s"
         cursor.execute(query, ('%' + search_query + '%', '%' + search_query + '%'))
         results = cursor.fetchall()
-        for row in results:
-            print(row)
+        return results
     except mysql.connector.Error as err:
         print(f"Error: {err}")
     finally:
         cursor.close()
+
         
 
 def update_article(conn, article_id, new_title, new_content):
@@ -118,13 +118,16 @@ def scrape_wikipedia():
     return jsonify({"message": "Scraped and saved successfully", "title": page_title, "url": url})
 
 
-app.route('/search', methods=['GET'])
+@app.route('/search', methods=['GET'])
 def search():
-        search_query = request.args.get('query')
-        conn = mysql.connector.connect(**db_config)
-        results = search_articles(conn, search_query)
-        conn.close()
-        return jsonify(results)
+    search_query = request.args.get('query')
+    conn = mysql.connector.connect(**db_config)
+    results = search_articles(conn, search_query)
+    conn.close()
+    # Format the results as a list of dictionaries
+    articles = [{'title': row[1], 'content': row[3]} for row in results]  # Adjust indexes as necessary
+    return jsonify(articles)
+
     
 
 app.route('/update', metods=['PUT'])
